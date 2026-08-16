@@ -1,0 +1,14 @@
+{
+  "name": "kk-payments",
+  "version": "1.0.0",
+  "description": "KijaniKiosk payments service for the capstone",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "lint": "node --check src/server.js && node --check src/controllers/paymentController.js && node --check src/routes/health.js && node --check src/routes/payments.js"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

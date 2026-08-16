@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kk-payments-config
+  namespace: kijani-staging
+  labels:
+    app.kubernetes.io/name: kk-payments
+    environment: staging
+data:
+  NODE_ENV: "staging"
+  DB_HOST: "staging-db"
+  DEFAULT_CURRENCY: "KES"

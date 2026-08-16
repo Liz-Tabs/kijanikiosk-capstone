@@ -1,0 +1,31 @@
+---
+- name: Configure KijaniKiosk staging environment
+  hosts: staging
+  gather_facts: false
+
+  vars:
+    staging_namespace: kijani-staging
+    environment_name: staging
+    db_host: staging-db
+    default_currency: KES
+
+  tasks:
+    - name: Verify staging namespace exists
+      ansible.builtin.command:
+        cmd: kubectl get namespace {{ staging_namespace }}
+      register: namespace_check
+      changed_when: false
+
+    - name: Display staging configuration
+      ansible.builtin.debug:
+        msg:
+          - "Namespace: {{ staging_namespace }}"
+          - "Environment: {{ environment_name }}"
+          - "DB_HOST: {{ db_host }}"
+          - "DEFAULT_CURRENCY: {{ default_currency }}"
+
+    - name: Verify staging ConfigMap exists
+      ansible.builtin.command:
+        cmd: kubectl get configmap kk-payments-config -n {{ staging_namespace }}
+      register: configmap_check
+      changed_when: false
