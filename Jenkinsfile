@@ -171,14 +171,24 @@ pipeline {
                 }
             }
         }
-
         stage('Approve Production Deployment') {
             steps {
-                input(
-                    message: 'Staging smoke test passed. Deploy to production?',
-                    ok: 'Deploy',
-                    submitter: 'liz'
-                )
+                script {
+                    def approval = input(
+                        message: 'Staging smoke test passed. Deploy to production?',
+                        ok: 'Deploy',
+                        submitter: 'liz',
+                        parameters: [
+                            text(
+                                name: 'APPROVAL_REASON',
+                                description: 'Reason for approving this production deployment'
+                            )
+                        ]
+                    )
+
+                    echo "Production deployment approved."
+                    echo "Approval reason recorded: ${approval}"
+                }
             }
         }
 
