@@ -15,8 +15,8 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
-                      -v "$PWD/app/kk-payments:/app" \
-                      -w /app \
+                      --volumes-from jenkins \
+                      -w "$WORKSPACE/app/kk-payments" \
                       node:20-alpine \
                       sh -c "npm ci && npm run lint"
                 '''
@@ -27,8 +27,8 @@ pipeline {
             steps {
                 sh '''
                     docker run --rm \
-                      -v "$PWD/app/kk-payments:/app" \
-                      -w /app \
+                      --volumes-from jenkins \
+                      -w "$WORKSPACE/app/kk-payments" \
                       node:20-alpine \
                       npm test
                 '''
