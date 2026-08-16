@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-alert-rules
+  namespace: kijani-staging
+data:
+  kk-payments-restarts.yaml: |
+    groups:
+      - name: kk-payments
+        rules:
+          - alert: KkPaymentsPodRestarting
+            expr: |
+              increase(
+                kube_pod_container_status_restarts_total{
+                  namespace="kijani-staging",
+                  container="kk-payments"
+                }[5m]
+              ) > 0
+            for: 1m
+            labels:
+              severity: warning
+              service: kk-payments
+              environment: staging
+            annotations:
+              summary: "kk-payments pod restarted"
+              description: "A kk-payments container in staging has restarted within the last 5 minutes."
