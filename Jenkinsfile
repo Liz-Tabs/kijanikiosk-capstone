@@ -5,78 +5,168 @@ pipeline {
         APP_NAME = 'kk-payments'
         STAGING_NAMESPACE = 'kijani-staging'
         IMAGE_TAG = '1.0.0'
+        MINIKUBE_IP = '192.168.49.2'
+        KUBECTL_IMAGE = 'bitnami/kubectl:1.36'
     }
 
     stages {
-        stage('Build') {
+
+        stage('Build and Lint') {
             steps {
-                dir('app/kk-payments') {
-                    sh 'npm ci'
-                    sh 'npm run lint'
-                }
+                sh '''
+                    docker run --rm \
+                      -v "$PWD/app/kk-payments:/app" \
+                      -w /app \
+                      node:20-alpine \
+                      sh -c "npm ci && npm run lint"
+                '''
             }
         }
 
         stage('Test') {
             steps {
-                dir('app/kk-payments') {
-                    sh 'npm test'
-                }
+                sh '''
+                    docker run --rm \
+                      -v "$PWD/app/kk-payments:/app" \
+                      -w /app \
+                      node:20-alpine \
+                      npm test
+                '''
             }
         }
 
         stage('Build Container') {
             steps {
                 dir('app/kk-payments') {
-                    sh 'docker build -t ${APP_NAME}:${IMAGE_TAG} .'
+                    sh '''
+                        docker build \
+                          -t ${APP_NAME}:${IMAGE_TAG} \
+                          .
+                    '''
                 }
             }
         }
-stage('Verify Kubernetes Access') {
-    steps {
-        withCredentials([
-            string(
-                credentialsId: 'k8s-staging-deployer-token',
-                variable: 'K8S_TOKEN'
-            )
-        ]) {
-            sh '''
-                docker run --rm \
-                  --network minikube \
-                  -e K8S_TOKEN="$K8S_TOKEN" \
-                  curlimages/curl \
-                  -k -sS --fail \
-                  -H "Authorization: Bearer $K8S_TOKEN" \
-                  https://192.168.49.2:8443/apis/apps/v1/namespaces/kijani-staging/deployments/kk-payments \
-                  >/dev/null
 
-                echo "Kubernetes authentication and staging access verified."
-            '''
+        stage('Verify Kubernetes Access') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'k8s-staging-deployer-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          curlimages/curl \
+                          -k -sS --fail \
+                          -H "Authorization: Bearer $K8S_TOKEN" \
+                          "https://${MINIKUBE_IP}:8443/apis/apps/v1/namespaces/${STAGING_NAMESPACE}/deployments/${APP_NAME}" \
+                          >/dev/null
+
+                        echo "Kubernetes authentication and staging access verified."
+                    '''
+                }
+            }
         }
-    }
-}
-        stage('Deploy to Staging') {
+
+        stage('Load Image into Minikube') {
             steps {
                 sh '''
-                    minikube image load ${APP_NAME}:${IMAGE_TAG}
-                    kubectl apply -f k8s/configmap-staging.yaml
-                    kubectl apply -f k8s/deployment.yaml -n ${STAGING_NAMESPACE}
-                    kubectl apply -f k8s/service.yaml -n ${STAGING_NAMESPACE}
-                    kubectl rollout status deployment/${APP_NAME} -n ${STAGING_NAMESPACE} --timeout=120s
+                    echo "Loading ${APP_NAME}:${IMAGE_TAG} into Minikube..."
+
+                    docker save ${APP_NAME}:${IMAGE_TAG} | \
+                      docker exec -i minikube docker load
+
+                    echo "Image loaded into Minikube."
                 '''
+            }
+        }
+
+        stage('Deploy to Staging') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'k8s-staging-deployer-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          -v "$PWD/k8s:/k8s:ro" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f /k8s/configmap-staging.yaml
+
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          -v "$PWD/k8s:/k8s:ro" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f /k8s/deployment.yaml \
+                          -n ${STAGING_NAMESPACE}
+
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          -v "$PWD/k8s:/k8s:ro" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f /k8s/service.yaml \
+                          -n ${STAGING_NAMESPACE}
+
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          rollout status \
+                          deployment/${APP_NAME} \
+                          -n ${STAGING_NAMESPACE} \
+                          --timeout=120s
+                    '''
+                }
             }
         }
 
         stage('Staging Smoke Test') {
             steps {
-                sh '''
-                    kubectl run ${APP_NAME}-smoke \
-                      -n ${STAGING_NAMESPACE} \
-                      --rm -i \
-                      --restart=Never \
-                      --image=curlimages/curl \
-                      -- curl -fsS http://${APP_NAME}/health
-                '''
+                withCredentials([
+                    string(
+                        credentialsId: 'k8s-staging-deployer-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          run ${APP_NAME}-smoke \
+                          -n ${STAGING_NAMESPACE} \
+                          --rm \
+                          -i \
+                          --restart=Never \
+                          --image=curlimages/curl \
+                          -- \
+                          curl -fsS http://${APP_NAME}/health
+                    '''
+                }
             }
         }
 
