@@ -96,33 +96,36 @@ pipeline {
                         docker run --rm \
                           --network minikube \
                           -e K8S_TOKEN="$K8S_TOKEN" \
-                          -v "$PWD/k8s:/k8s:ro" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
                           ${KUBECTL_IMAGE} \
                           --server=https://${MINIKUBE_IP}:8443 \
                           --token="$K8S_TOKEN" \
                           --insecure-skip-tls-verify=true \
-                          apply -f /k8s/configmap-staging.yaml
+                          apply -f k8s/configmap-staging.yaml
 
                         docker run --rm \
                           --network minikube \
                           -e K8S_TOKEN="$K8S_TOKEN" \
-                          -v "$PWD/k8s:/k8s:ro" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
                           ${KUBECTL_IMAGE} \
                           --server=https://${MINIKUBE_IP}:8443 \
                           --token="$K8S_TOKEN" \
                           --insecure-skip-tls-verify=true \
-                          apply -f /k8s/deployment.yaml \
+                          apply -f k8s/deployment.yaml \
                           -n ${STAGING_NAMESPACE}
 
                         docker run --rm \
                           --network minikube \
                           -e K8S_TOKEN="$K8S_TOKEN" \
-                          -v "$PWD/k8s:/k8s:ro" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
                           ${KUBECTL_IMAGE} \
                           --server=https://${MINIKUBE_IP}:8443 \
                           --token="$K8S_TOKEN" \
                           --insecure-skip-tls-verify=true \
-                          apply -f /k8s/service.yaml \
+                          apply -f k8s/service.yaml \
                           -n ${STAGING_NAMESPACE}
 
                         docker run --rm \
