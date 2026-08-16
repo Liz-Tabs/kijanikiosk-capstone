@@ -83,7 +83,6 @@ pipeline {
                 '''
             }
         }
-
         stage('Deploy to Staging') {
             steps {
                 withCredentials([
@@ -185,7 +184,62 @@ pipeline {
 
         stage('Deploy to Production') {
             steps {
-                echo 'Production deployment will be implemented after the approval gate is verified.'
+                withCredentials([
+                    string(
+                        credentialsId: 'k8s-staging-deployer-token',
+                        variable: 'K8S_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f k8s/configmap-production.yaml
+
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f k8s/deployment.yaml \
+                          -n kijani-production
+
+                        docker run --rm \
+                          --network minikube \
+                          -e K8S_TOKEN="$K8S_TOKEN" \
+                          --volumes-from jenkins \
+                          -w "$WORKSPACE" \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          apply -f k8s/service.yaml \
+                          -n kijani-production
+
+                        docker run --rm \
+                          --network minikube \
+                          ${KUBECTL_IMAGE} \
+                          --server=https://${MINIKUBE_IP}:8443 \
+                          --token="$K8S_TOKEN" \
+                          --insecure-skip-tls-verify=true \
+                          rollout status \
+                          deployment/${APP_NAME} \
+                          -n kijani-production \
+                          --timeout=120s
+
+                        echo "Production deployment completed successfully."
+                    '''
+                }
             }
         }
     }
