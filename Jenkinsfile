@@ -6,7 +6,7 @@ pipeline {
         STAGING_NAMESPACE = 'kijani-staging'
         IMAGE_TAG = '1.0.0'
         MINIKUBE_IP = '192.168.49.2'
-        KUBECTL_IMAGE = 'bitnami/kubectl:1.36'
+        KUBECTL_IMAGE = 'alpine/kubectl:1.36.3'
     }
 
     stages {
